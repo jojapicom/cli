@@ -1,6 +1,6 @@
 # @jojapi/cli
 
-Pull, develop and deploy the Worker code of your jojapi APIs from the command line or CI.
+Pull, develop and deploy the Worker code of your APIs on JoJ API from the command line or CI.
 Your API is a plain Worker; this tool moves its files between your machine and the platform
 over the [Management API](https://docs.jojapi.com/studio/management-api), runs it locally under
 `wrangler dev` with the gateway's headers added, and manages its

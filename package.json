@@ -1,7 +1,7 @@
 {
   "name": "@jojapi/cli",
-  "version": "0.1.1",
-  "description": "Pull, develop and deploy the Worker code of your jojapi APIs from the command line",
+  "version": "0.1.2",
+  "description": "Pull, develop and deploy the Worker code of your APIs on JoJ API from the command line",
   "license": "MIT",
   "author": "Apryco, LLC",
   "homepage": "https://github.com/jojapicom/cli#readme",
