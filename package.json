@@ -1,0 +1,40 @@
+{
+  "name": "@jojapi/cli",
+  "version": "0.1.1",
+  "description": "Pull, develop and deploy the Worker code of your jojapi APIs from the command line",
+  "license": "MIT",
+  "author": "Apryco, LLC",
+  "homepage": "https://github.com/jojapicom/cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jojapicom/cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jojapicom/cli/issues"
+  },
+  "keywords": [
+    "jojapi",
+    "api",
+    "cloudflare-workers",
+    "deploy",
+    "cli"
+  ],
+  "type": "module",
+  "bin": {
+    "jojapi": "bin/jojapi.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
