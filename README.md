@@ -65,7 +65,8 @@ bundling), `npm test` runs the tests.
 
 Releases are published by GitHub Actions with [npm provenance](https://docs.npmjs.com/generating-provenance-statements):
 bump `version` in `package.json`, commit, and push a tag `v<version>`. The publish workflow checks
-that the tag matches the version, runs the tests and publishes.
+that the tag matches the version, runs the tests and stages the release on npm; it goes live once a
+maintainer approves it there with two-factor authentication.
 
 ## License
 

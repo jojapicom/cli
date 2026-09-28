@@ -1,6 +1,8 @@
-# Publishes @jojapi/cli to npm when a tag v<version> is pushed. npm trusts
-# this workflow (trusted publishing over OIDC): no npm token is stored, and
-# every release carries a provenance statement linking it to its commit.
+# Stages @jojapi/cli on npm when a tag v<version> is pushed. npm trusts this
+# workflow (trusted publishing over OIDC): no npm token is stored, and every
+# release carries a provenance statement linking it to its commit. A staged
+# version goes live only when a maintainer approves it with 2FA on npmjs.com
+# (or `npm stage approve <id>`).
 name: Publish
 
 on:
@@ -28,6 +30,6 @@ jobs:
             exit 1
           fi
       - run: npm test
-      # Trusted publishing needs npm 11.5.1 or later
+      # Trusted publishing and staged publishing need a recent npm
       - run: npm install -g npm@latest
-      - run: npm publish --access public
+      - run: npm stage publish
