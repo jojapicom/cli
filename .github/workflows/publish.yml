@@ -29,6 +29,7 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version"
             exit 1
           fi
+      - run: npm install --no-audit --no-fund
       - run: npm test
       # Trusted publishing and staged publishing need a recent npm
       - run: npm install -g npm@latest

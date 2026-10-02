@@ -78,7 +78,7 @@ test("resources lists bindings, removals, shares and the grants other APIs made"
     assert.match(result.stdout, /POOL\s+shared\s+do POOL from test-owner-api \(TEST Account\)/);
     assert.match(result.stdout, /sh000001 .* bound as POOL/);
     assert.match(result.stdout, /sh000002 .* bind it: jojapi resources add shared <BINDING> --share sh000002/);
-    assert.match(result.stdout, /sh000003 .* invitation — accept or decline it in the Studio/);
+    assert.match(result.stdout, /sh000003 .* invitation — jojapi resources accept sh000003, or decline/);
   } finally {
     studio.server.close();
   }

@@ -1,13 +1,8 @@
 #!/usr/bin/env node
-// jojapi — the Worker code of your APIs from the command line.
-//
-//   jojapi login --token jm_…            store a management token (code:read / code:write)
-//   jojapi pull <slug> [dir]             download the API's files (or its generated Worker)
-//   jojapi deploy [dir] [--prod]         upload the files (bundling npm dependencies) and deploy
-//   jojapi dev [dir]                     run the Worker locally under wrangler with the gateway headers
-//   jojapi logs <slug> [--follow]        console output captured while logs are on
-//   jojapi errors <slug>                 runtime issues
-//   jojapi resources [add|remove]        storage and queues bound to the Worker
+// jojapi — your APIs on JoJ API from the command line: the Worker code and its
+// deployments, bindings and variables; the listing, its OpenAPI document and
+// pricing; traffic, request logs and subscribers. `jojapi help` lists the
+// commands, `jojapi <command> --help` their arguments.
 //
 // Configuration: ~/.config/jojapi/config.json (token, base URL); JOJAPI_TOKEN and
 // JOJAPI_BASE override it. The token is never printed.

@@ -1,6 +1,6 @@
 {
   "name": "@jojapi/cli",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "Pull, develop and deploy the Worker code of your APIs on JoJ API from the command line",
   "license": "MIT",
   "author": "Apryco, LLC",
@@ -35,6 +35,7 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "esbuild": "^0.25.0"
+    "esbuild": "^0.25.0",
+    "js-yaml": "^5.4.2"
   }
 }
