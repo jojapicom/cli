@@ -176,11 +176,12 @@ async function transactions(positional, flags) {
 async function subscribers(positional, flags) {
   const { slug } = resolveSlugAndDir(positional.slice(0, 1), flags, false);
   const all = ok(await api().get("v2/ProviderSubscriptions")).subscriptions ?? [];
-  // Raw subscription and transfer ids are left out of every output
+  // Public (string) ids pass; raw row numbers from an older platform never do
+  const publicId = (id) => (typeof id === "string" ? id : undefined);
   const list = all.filter((s) => !slug || s.api?.slug === slug).map(({ subscription, pending_transfer, ...rest }) => ({
     ...rest,
-    subscription: subscription ? { ...subscription, id: undefined } : subscription,
-    pending_transfer: pending_transfer ? { ...pending_transfer, id: undefined } : null,
+    subscription: subscription ? { ...subscription, id: publicId(subscription.id) } : subscription,
+    pending_transfer: pending_transfer ? { ...pending_transfer, id: publicId(pending_transfer.id) } : null,
   }));
   if (flags.json) return printJson({ subscriptions: list });
   if (!list.length) {

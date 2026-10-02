@@ -119,7 +119,7 @@ async function discardChanges(positional, flags) {
   const added = pending.changes.filter((c) => c.type === "resource" && c.change === "added").map((c) => c.name);
   const details = [
     `Template, code, variables (secrets too) and bindings return to what production (#${pending.production.number}) runs; the previews made since are archived (their snapshots stay).`,
-    added.length ? `Storage added since production (${added.join(", ")}) is removed and its data deleted, unless a kept or public deployment still binds it or another API uses it.` : "",
+    added.length ? `The bindings added since then (${added.join(", ")}) are removed: storage this API created is deleted with its data unless another API uses it or a kept or public deployment still binds it.` : "",
   ].filter(Boolean).join("\n");
   if (!(await confirmed(flags, { action: "discarding the saved changes", details, question: `Discard these ${pending.changes.length} change(s)?` }))) return 1;
   const res = await platform.post("v2/discard-api-edge-changes", { slug });

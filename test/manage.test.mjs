@@ -195,6 +195,21 @@ test("plans create sends typed values, warns about objects it leaves out, and na
   }
 });
 
+test("plans create takes the new plan's slug from the answer when the platform names it", async () => {
+  const s = await fakeStudio({
+    "v2/studio/api-plans": plansAnswer([{ slug: "plantest0000000000answer", type: "periodic", name: "Named", period: "1 MONTH", price: { currency: "usd" }, pricing: { price: 5 }, objects: [], blocked: true, rate_limit: {}, subscriptions_count: 0, custom_users: [], features: [] }]),
+    "v2/studio/api-objects": OBJECTS,
+    "v2/studio/create-api-plan": { status: "success", message: "New plan added successfully", plan: { slug: "plantest0000000000answer", type: "periodic", blocked: true } },
+  });
+  try {
+    const result = await jojapi(s, ["plans", "create", "--price", "5", "--quota", "requests=100", "--quota", "tokens=10", "--json", "--yes"]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).plan.slug, "plantest0000000000answer");
+  } finally {
+    s.close();
+  }
+});
+
 test("making a plan private resends its rate limit; add-object names the subscribers it emails", async () => {
   const s = await fakeStudio({
     "v2/studio/api-plans": plansAnswer(),
@@ -223,6 +238,20 @@ test("grant finds the subscription by its subscriber and never prints its id", a
     assert.equal(result.code, 0, result.stderr);
     assert.deepEqual(s.posts("v2/studio/grant-quota")[0].body, { subscription_id: 987654, object_id: "objTEST1", units: 1000, note: "TEST note" });
     assert.doesNotMatch(result.stdout + result.stderr, /987654/);
+  } finally {
+    s.close();
+  }
+});
+
+test("grant sends a public subscription id back as the platform returned it", async () => {
+  const s = await fakeStudio({
+    "v2/ProviderSubscriptions": { status: "success", subscriptions: [{ api: { slug: "test-api" }, user: { nick: "testuser" }, plan: { slug: "plantest000000000000basic", type: "periodic", name: "10,000 Requests" }, subscription: { id: "n0a1b2c3d", status: "active", current_period: { objects: [{ id: "objTEST1", slug: "requests", name: "Requests", used: 1, quota: 10 }] } } }] },
+    "v2/studio/grant-quota": { status: "success", message: "Added 5 Requests to @testuser's current period." },
+  });
+  try {
+    const result = await jojapi(s, ["grant", "testuser", "requests", "5", "--yes"]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.deepEqual(s.posts("v2/studio/grant-quota")[0].body, { subscription_id: "n0a1b2c3d", object_id: "objTEST1", units: 5 });
   } finally {
     s.close();
   }
@@ -289,6 +318,19 @@ test("subscribers never show raw subscription ids", async () => {
       assert.doesNotMatch(result.stdout, /987654|4321/);
     }
     assert.match((await jojapi(s, ["subscribers"])).stdout, /testuser\s+test-api\s+Basic \(9\.00 USD\/month\)\s+active\s+2026-09-01\s+2026-10-01\s+10\/100 requests\s+→ Pro \(pending\)/);
+  } finally {
+    s.close();
+  }
+});
+
+test("subscribers --json keeps public ids", async () => {
+  const s = await fakeStudio({
+    "v2/ProviderSubscriptions": { status: "success", subscriptions: [{ api: { slug: "test-api" }, user: { nick: "testuser" }, plan: { slug: "p", type: "periodic", name: "Basic", pricing: { price: 0 } }, subscription: { id: "n0a1b2c3d", status: "active", current_period: { objects: [] } }, pending_transfer: { id: "n9f8e7d6c", status: "pending", target_plan: { name: "Pro" } } }] },
+  });
+  try {
+    const out = JSON.parse((await jojapi(s, ["subscribers", "--json"])).stdout);
+    assert.equal(out.subscriptions[0].subscription.id, "n0a1b2c3d");
+    assert.equal(out.subscriptions[0].pending_transfer.id, "n9f8e7d6c");
   } finally {
     s.close();
   }

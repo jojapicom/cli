@@ -159,9 +159,11 @@ async function planCreate(positional, flags) {
 
   const res = await platform.post("v2/studio/create-api-plan", { api_slug: slug, plan });
   if (res.status !== "success") return refused(res, flags);
-  // The answer does not name the plan: it is the one that was not there before
+  // The answer names the plan; an older platform does not, and then it is the
+  // one that was not there before
+  const plans = (await loadPlans(platform, slug)).plans;
   const before = new Set(existing.map((p) => p.slug));
-  const created = (await loadPlans(platform, slug)).plans.find((p) => !before.has(p.slug));
+  const created = plans.find((p) => p.slug === res.plan?.slug) ?? plans.find((p) => !before.has(p.slug));
   if (flags.json) return printJson({ status: "success", plan: created ?? null });
   if (!created) console.log(`plan created (${plan.blocked ? "private" : "public"}); jojapi plans lists it`);
   else console.log(`plan ${created.slug} created — ${plan.blocked ? `private; open it with jojapi plans public ${created.slug}` : "public"}`);
@@ -457,7 +459,9 @@ async function grant(positional, flags) {
   const { slug, args: [nick, objectSlug, units] } = slugAndArgs(positional, flags, 3, usage);
   if (!/^\d+$/.test(units) || Number(units) < 1 || Number(units) > 1e9) throw new Error("units is a whole number from 1 to 1,000,000,000");
   const platform = api();
-  // The subscription is found by its subscriber; its id is never shown
+  // The subscription is found by its subscriber; its id goes back to the
+  // platform as returned (a public id, or a row number on an older platform)
+  // and is never shown
   const candidates = (ok(await platform.get("v2/ProviderSubscriptions")).subscriptions ?? []).filter((s) => s.api?.slug === slug && s.user?.nick === nick && (!text(flags, "plan") || s.plan?.slug === text(flags, "plan")));
   if (!candidates.length) throw new Error(`@${nick} has no active subscription to ${slug}`);
   if (candidates.length > 1) throw new Error(`@${nick} holds ${candidates.length} subscriptions to ${slug}: pass --plan (${candidates.map((s) => s.plan.slug).join(", ")})`);
