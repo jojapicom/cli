@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
+import { createInterface } from "node:readline/promises";
 import { client, describeDeploy } from "./api.mjs";
 import { PROJECT_FILE, readConfig, readProject, writeConfig, writeProject } from "./config.mjs";
 import { bundle, bundleEntry, collectFiles, hasDependencies } from "./files.mjs";
@@ -28,6 +29,16 @@ const USAGE = `jojapi <command>
   logs <slug> [--follow]             console output captured while logs are on
   errors <slug>                      runtime issues, most recent first
   status <slug>                      mode, files, variables, resources, settings
+  resources [slug]                   the API's resources, and resources other APIs share with it
+  resources add [slug] <kind> <BINDING> [--class Name] [--share id] [--prod]
+                                     create a kv, d1, r2, queue or do resource (do: --class names the
+                                     class your code exports) and bind it as env.BINDING, or bind a
+                                     resource shared with the API (kind shared, --share id); a preview
+                                     deployment, --prod puts only this change in production
+  resources remove [slug] <BINDING> [--prod] [--yes]
+                                     unbind it as a preview (--prod: in production at once); its data
+                                     is deleted once no active deployment binds it; --yes skips the
+                                     confirmation
 
 Environment: JOJAPI_TOKEN, JOJAPI_BASE override ~/.config/jojapi/config.json.`;
 
@@ -45,6 +56,7 @@ export async function run(argv) {
     case "deployments": return deployments(positional, flags);
     case "promote": return promote(positional, flags);
     case "rollback": return rollback(positional, flags);
+    case "resources": return resources(positional, flags);
     case undefined:
     case "help":
     case "--help":
@@ -58,7 +70,7 @@ export async function run(argv) {
 }
 
 // Switches never take a value: `deploy --prod ./dir` keeps ./dir positional
-const BOOLEAN_FLAGS = new Set(["prod", "take-over", "dry-run", "follow", "json"]);
+const BOOLEAN_FLAGS = new Set(["prod", "take-over", "dry-run", "follow", "json", "yes"]);
 
 export function parseArgs(args) {
   const positional = [];
@@ -382,6 +394,127 @@ async function rollback(positional, flags) {
   return 0;
 }
 
+const RESOURCE_KINDS = ["kv", "d1", "r2", "queue", "do", "shared"];
+const RESOURCE_LABELS = { kv: "key-value store", d1: "database", r2: "bucket", queue: "queue" };
+
+async function resources(positional, flags) {
+  const [action, ...rest] = positional;
+  if (action === "add") return resourceAdd(rest, flags);
+  if (action === "remove") return resourceRemove(rest, flags);
+  return resourceList(positional, flags);
+}
+
+async function resourceList(positional, flags) {
+  const { slug } = await resolveSlugAndDir(positional.slice(0, 1), flags);
+  const api = client(readConfig());
+  const edge = await loadEdge(api, slug);
+  const shares = await api.get("v2/provider-api-edge-shares", { slug });
+  if (shares.status !== "success") throw new Error(shares.message || shares.status);
+
+  const grantees = new Map((shares.outgoing ?? []).map((o) => [o.binding, o.shares.filter((s) => s.status === "active").map((s) => s.target.slug)]));
+  const width = Math.max(8, ...edge.resources.map((r) => r.binding.length));
+  if (!edge.resources.length) console.log("no resources — add one: jojapi resources add <kv|d1|r2|queue|do> <BINDING>");
+  for (const r of edge.resources) {
+    let detail;
+    if (r.kind === "shared") {
+      detail = r.shared ? `${r.shared.kind} ${r.shared.name} from ${r.shared.owner.slug} (${r.shared.owner.account})${r.shared.status === "active" ? "" : `, ${r.shared.status}`}` : "the grant no longer exists";
+    } else {
+      const usedBy = grantees.get(r.binding) ?? [];
+      detail = [r.className && `class ${r.className}`, usedBy.length && `shared with ${usedBy.join(", ")}`].filter(Boolean).join(" · ");
+    }
+    if (r.status === "removed") detail = `removed — deleted once no active deployment binds it${r.error ? `: ${r.error}` : ""}`;
+    console.log(`${r.binding.padEnd(width)}  ${r.kind.padEnd(6)}  ${detail}`.trimEnd());
+  }
+
+  const incoming = shares.incoming ?? [];
+  if (incoming.length) {
+    console.log("\nshared with this API:");
+    for (const s of incoming) {
+      const what = `${s.kind} ${s.name}${s.class_name ? ` (class ${s.class_name})` : ""} from ${s.owner.slug} (${s.owner.account})`;
+      const state = s.status === "pending"
+        ? "invitation — accept or decline it in the Studio (Worker → Bindings)"
+        : s.bindings.length ? `bound as ${s.bindings.join(", ")}` : `bind it: jojapi resources add shared <BINDING> --share ${s.share}`;
+      console.log(`  ${s.share}  ${what}  ${state}`);
+    }
+  }
+  return 0;
+}
+
+async function resourceAdd(positional, flags) {
+  // `add <kind> <BINDING>` inside a project directory, or `add <slug> <kind> <BINDING>`
+  const usage = "usage: jojapi resources add [slug] <kv|d1|r2|queue|do|shared> <BINDING> [--class Name] [--share id] [--prod]";
+  const [kind, binding] = positional.slice(-2);
+  if (positional.length < 2 || positional.length > 3 || !RESOURCE_KINDS.includes(kind)) throw new Error(usage);
+  if (kind === "do" && typeof flags.class !== "string") throw new Error("a Durable Object needs the class your code exports: --class Name");
+  if (kind === "shared" && typeof flags.share !== "string") throw new Error("pass the grant to bind: --share id (listed by jojapi resources)");
+  const { slug } = await resolveSlugAndDir(positional.length === 3 ? positional.slice(0, 1) : [], flags);
+  const api = client(readConfig());
+
+  const payload = { slug, kind, binding };
+  if (kind === "do") payload.class_name = flags.class;
+  if (kind === "shared") payload.share_id = flags.share;
+  if (flags.prod === true) payload.production = true;
+  const res = await api.post("v2/update-api-edge-resource", payload);
+  if (res.status !== "success") {
+    console.error(res.message || res.status);
+    return 1;
+  }
+  return reportResourceSave(`${binding.toUpperCase()} (${kind}): ${res.message}`, res.deploy);
+}
+
+async function resourceRemove(positional, flags) {
+  if (positional.length < 1 || positional.length > 2) throw new Error("usage: jojapi resources remove [slug] <BINDING> [--prod] [--yes]");
+  const binding = positional.at(-1).toUpperCase();
+  const { slug } = await resolveSlugAndDir(positional.length === 2 ? positional.slice(0, 1) : [], flags);
+  const api = client(readConfig());
+
+  if (flags.yes !== true) {
+    const edge = await loadEdge(api, slug);
+    const resource = edge.resources.find((r) => r.binding === binding && r.status !== "removed");
+    if (!resource) throw new Error(`${slug} has no resource bound as ${binding}`);
+    if (!process.stdin.isTTY) throw new Error(`removing ${binding} needs confirmation: pass --yes`);
+    const when = flags.prod === true ? "Production loses the binding at once." : "The binding leaves a new preview; production keeps it until you deploy.";
+    const effect = resource.kind === "shared"
+      ? `The resource and its data stay with ${resource.shared?.owner.slug ?? "its owner"}.`
+      : resource.kind === "do"
+        ? "The class stays in your code; the objects' storage is deleted once no active deployment binds it. This cannot be undone."
+        : `The ${RESOURCE_LABELS[resource.kind]} and all data in it are deleted once no active deployment binds it${resource.kind === "r2" ? "; it must be empty by then" : ""}. This cannot be undone.`;
+    console.error(`${when}\n${effect}`);
+    if (!(await confirm(`${resource.kind === "shared" ? "Unbind" : "Remove"} ${binding} from ${slug}?`))) {
+      console.error("nothing removed");
+      return 1;
+    }
+  }
+
+  const payload = { slug, binding };
+  if (flags.prod === true) payload.production = true;
+  const res = await api.post("v2/delete-api-edge-resource", payload);
+  if (res.status !== "success") {
+    console.error(res.message || res.status);
+    return 1;
+  }
+  return reportResourceSave(`${binding}: ${res.message}`, res.deploy);
+}
+
+// A resource save deploys like any other save: a preview, or with --prod
+// production's snapshot with only this change (other pending changes then get
+// a preview of their own)
+function reportResourceSave(headline, deploy) {
+  const result = describeDeploy(deploy);
+  console.log(result ? `${headline} — ${result}` : headline);
+  if (deploy?.preview) console.log(`other pending changes: ${describeDeploy(deploy.preview)}`);
+  return deploy?.status === "error" || deploy?.status === "needs_code" ? 1 : 0;
+}
+
+async function confirm(question) {
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    return /^y(es)?$/i.test((await rl.question(`${question} [y/N] `)).trim());
+  } finally {
+    rl.close();
+  }
+}
+
 // ---------------------------------------------------------------------------
 
 async function loadEdge(api, slug) {
@@ -399,11 +532,16 @@ function writeWranglerConfig(dir, slug, edge) {
     compatibility_date: "2026-08-15",
     compatibility_flags: ["nodejs_compat"],
   };
-  const kv = edge.resources.filter((r) => r.kind === "kv").map((r) => ({ binding: r.binding, id: r.cloudflareId || "local" }));
-  const d1 = edge.resources.filter((r) => r.kind === "d1").map((r) => ({ binding: r.binding, database_name: r.cloudflareId || r.binding.toLowerCase(), database_id: r.cloudflareId || "local" }));
-  const r2 = edge.resources.filter((r) => r.kind === "r2").map((r) => ({ binding: r.binding, bucket_name: r.cloudflareId || r.binding.toLowerCase() }));
-  const queues = edge.resources.filter((r) => r.kind === "queue").map((r) => ({ binding: r.binding, queue: r.cloudflareId || r.binding.toLowerCase() }));
-  const dos = edge.resources.filter((r) => r.kind === "do" && r.className).map((r) => ({ name: r.binding, class_name: r.className }));
+  // Removed bindings wait for deletion and are left out; a shared one is bound
+  // locally as its kind, except a Durable Object class (it runs in the owner's Worker)
+  const resources = edge.resources
+    .filter((r) => r.status !== "removed")
+    .map((r) => (r.kind === "shared" && r.shared ? { ...r, kind: r.shared.kind, className: null } : r));
+  const kv = resources.filter((r) => r.kind === "kv").map((r) => ({ binding: r.binding, id: r.cloudflareId || "local" }));
+  const d1 = resources.filter((r) => r.kind === "d1").map((r) => ({ binding: r.binding, database_name: r.cloudflareId || r.binding.toLowerCase(), database_id: r.cloudflareId || "local" }));
+  const r2 = resources.filter((r) => r.kind === "r2").map((r) => ({ binding: r.binding, bucket_name: r.cloudflareId || r.binding.toLowerCase() }));
+  const queues = resources.filter((r) => r.kind === "queue").map((r) => ({ binding: r.binding, queue: r.cloudflareId || r.binding.toLowerCase() }));
+  const dos = resources.filter((r) => r.kind === "do" && r.className).map((r) => ({ name: r.binding, class_name: r.className }));
   if (kv.length) config.kv_namespaces = kv;
   if (d1.length) config.d1_databases = d1;
   if (r2.length) config.r2_buckets = r2;

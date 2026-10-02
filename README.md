@@ -18,6 +18,9 @@ jojapi promote k3j9x2ab --note "…"  # serve a deployment in production (public
 jojapi rollback                     # back to what production served before
 jojapi logs my-api --follow         # console output (logs switched on in Studio)
 jojapi errors my-api                # runtime issues
+jojapi resources                    # storage and queues bound to the Worker, and shares
+jojapi resources add kv CACHE       # a key-value store bound as env.CACHE (a preview)
+jojapi resources remove CACHE       # asks first; its data goes once no deployment binds it
 ```
 
 ## Deployments and git
@@ -37,6 +40,32 @@ stored files again as production, unless production already runs them.
 In GitHub Actions, [`jojapicom/deploy-action`](https://github.com/jojapicom/deploy-action) runs
 this for you: a preview per pull request (its URL commented on the pull request), production per
 merge. See [Deploy from GitHub](https://docs.jojapi.com/studio/github-actions).
+
+## Resources
+
+`jojapi resources add <kind> <BINDING>` creates [storage or a queue](https://docs.jojapi.com/studio/custom-code#storage-and-queues)
+for the API alone and binds it to its Worker as `env.BINDING`:
+
+| Kind | Creates |
+| --- | --- |
+| `kv` | a key-value store |
+| `d1` | a SQL database |
+| `r2` | an object storage bucket |
+| `queue` | a queue |
+| `do` | a Durable Object class; `--class Counter` names the class your code exports |
+
+Like every save it is a preview deployment first, so you can test it with the code that uses it;
+`--prod` puts only this change into production at once. A resource another API
+[shares](https://docs.jojapi.com/studio/shared-resources) with yours is bound with
+`jojapi resources add shared <BINDING> --share <id>`; `jojapi resources` lists the grants with their
+ids. Invitations from other accounts are accepted in the Studio.
+
+`jojapi resources remove <BINDING>` asks before it unbinds; `--yes` skips the question and is
+required without a terminal (CI). The resource and its data are deleted once no active deployment
+binds it, so a rollback still finds it. Unbinding a shared resource leaves it with its owner.
+
+`jojapi pull` and `jojapi dev` write the bindings into `wrangler.jsonc` as local resources; a shared
+Durable Object class is left out, since it runs in the owner's Worker.
 
 ## Bundling
 

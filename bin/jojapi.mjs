@@ -7,6 +7,7 @@
 //   jojapi dev [dir]                     run the Worker locally under wrangler with the gateway headers
 //   jojapi logs <slug> [--follow]        console output captured while logs are on
 //   jojapi errors <slug>                 runtime issues
+//   jojapi resources [add|remove]        storage and queues bound to the Worker
 //
 // Configuration: ~/.config/jojapi/config.json (token, base URL); JOJAPI_TOKEN and
 // JOJAPI_BASE override it. The token is never printed.
