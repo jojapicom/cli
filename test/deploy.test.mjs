@@ -70,6 +70,35 @@ test("a deploy to an API in template mode uploads the files and reports the swit
   }
 });
 
+test("a production deploy sends its release note", async () => {
+  const studio = await fakeStudio(
+    { mode: "custom", files: [] },
+    { status: "success", deploy: { status: "deployed", promoted: true, deployment: { id: "abcd1234", number: 4, url: "https://test-api--abcd1234.jojapi.dev" } } },
+  );
+  try {
+    const result = await deploy(project(), studio.base, ["--prod", "--note", "  TEST release note ", "--json"]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(studio.saves.length, 1);
+    assert.equal(studio.saves[0].production, true);
+    assert.equal(studio.saves[0].note, "TEST release note");
+    assert.equal(JSON.parse(result.stdout).promoted, true);
+  } finally {
+    studio.server.close();
+  }
+});
+
+test("a release note without --prod is refused before anything is saved", async () => {
+  const studio = await fakeStudio({ mode: "custom", files: [] }, { status: "success" });
+  try {
+    const result = await deploy(project(), studio.base, ["--note", "TEST release note"]);
+    assert.notEqual(result.code, 0);
+    assert.equal(studio.saves.length, 0);
+    assert.match(result.stderr, /--note is the public release note of a production deploy: add --prod/);
+  } finally {
+    studio.server.close();
+  }
+});
+
 test("a dry run against an API in template mode announces the switch and saves nothing", async () => {
   const studio = await fakeStudio({ mode: "generated", files: [] }, { status: "success" });
   try {

@@ -68,6 +68,9 @@ async function pull(positional) {
 
 async function deploy(positional, flags) {
   const { slug, dir } = resolveSlugAndDir(positional, flags);
+  // The release note is public on the API page and belongs to a production deploy only
+  const note = typeof flags.note === "string" ? flags.note.trim() : "";
+  if (note && flags.prod !== true) throw new Error("--note is the public release note of a production deploy: add --prod");
   const platform = api();
   const edge = await loadEdge(platform, slug);
   // --json: the result alone on stdout (CI steps parse it), progress on stderr
@@ -99,6 +102,7 @@ async function deploy(positional, flags) {
     say(`would upload ${changed.length} file(s): ${changed.map(([p]) => p).join(", ") || "—"}`);
     say(`would delete ${remove.length} file(s): ${remove.join(", ") || "—"}`);
     if (origin.git) say(`origin: ${JSON.stringify(origin.git)}`);
+    if (note) say(`release note: ${note}`);
     return 0;
   }
   const production = flags.prod === true;
@@ -115,13 +119,14 @@ async function deploy(positional, flags) {
   const message = typeof flags.message === "string" ? flags.message : origin.message;
   if (message) payload.message = message;
   if (origin.git) payload.git = origin.git;
+  if (note) payload.note = note;
   const res = await platform.post("v2/update-api-edge-files", payload);
   if (res.status !== "success") return refused(res, flags);
   if (res.switched_to_code === true) say("switched to code mode (Back to template in Studio restores the template)");
   const failed = res.deploy?.status === "error" || res.deploy?.status === "needs_code";
   if (res.deploy?.status === "unchanged") {
     if (flags.json) printJson({ status: "unchanged" });
-    else say("nothing to deploy: production already runs these files");
+    else say(`nothing to deploy: production already runs these files${note ? " (no release, so the note was not recorded)" : ""}`);
     return 0;
   }
   if (flags.json) {
@@ -293,9 +298,9 @@ export default {
       run: dev,
     },
     deploy: {
-      usage: ["deploy [dir] [--prod] [--message text] [--json] [--dry-run]"],
+      usage: ["deploy [dir] [--prod] [--note text] [--message text] [--json] [--dry-run]"],
       summary: "upload the files as a new deployment on its own URL",
-      help: "Bundles src/ (or a project with npm dependencies) with esbuild into index.mjs. --prod also makes the deployment production. The commit, branch and pull request (git or GitHub Actions) are recorded; --json prints the result for scripts. An API in template mode switches to code mode.",
+      help: "Bundles src/ (or a project with npm dependencies) with esbuild into index.mjs. --prod also makes the deployment production; --note (with --prod) is its public release note on the API page. The commit, branch and pull request (git or GitHub Actions) are recorded as the deployment's private description (--message overrides it); --json prints the result for scripts. An API in template mode switches to code mode.",
       run: deploy,
     },
     status: {

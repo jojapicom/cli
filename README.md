@@ -20,7 +20,7 @@ a pulled project most commands need no slug.
 # Code
 jojapi pull my-api                  # ./my-api: index.mjs, other files, .dev.vars.example, wrangler.jsonc
 cd my-api && jojapi dev             # http://127.0.0.1:8788 → wrangler dev with x-jojapi-* headers
-jojapi deploy                       # a preview deployment on its own URL (--prod: production)
+jojapi deploy                       # a preview deployment on its own URL (--prod: production, --note: release note)
 jojapi logs --follow                # console output (jojapi settings --logs on)
 jojapi errors                       # runtime issues
 
@@ -101,6 +101,10 @@ local git checkout (and whether it had uncommitted changes), or — in GitHub Ac
 branch and pull request of the run. The commit subject (or pull request title) becomes the
 deployment's description unless `--message` is given. `--prod` without file changes deploys the
 stored files again as production, unless production already runs them.
+
+The description stays in your Studio. What consumers read is the release note: `--note "…"` with
+`--prod` shows it under **Releases** on the API page; a production deploy without one is not listed
+there (the page's "Last updated" still moves).
 
 In GitHub Actions, [`jojapicom/deploy-action`](https://github.com/jojapicom/deploy-action) runs
 this for you: a preview per pull request (its URL commented on the pull request), production per
