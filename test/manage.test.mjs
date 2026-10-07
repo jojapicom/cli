@@ -103,6 +103,35 @@ test("hiding an endpoint sends its billing back unchanged", async () => {
   }
 });
 
+test("paths that differ only in case or a trailing slash address different endpoints", async () => {
+  // The gateway matches paths byte for byte, so the platform does too
+  const endpoints = ["/Search/", "/search", "/Search"].map((url_path) => ({ ...ENDPOINT, url_path, name: `TEST ${url_path}`, consumptions: [] }));
+  const s = await fakeStudio({
+    "v2/provider/api-endpoint": (_, query) => {
+      const endpoint = endpoints.find((e) => e.method === query.method && e.url_path === query.url_path);
+      return endpoint ? { status: "success", endpoint } : { status: "endpoint_not_found", message: "Endpoint not found" };
+    },
+    "v2/provider/update-endpoint-details": { status: "success" },
+    "v2/provider/delete-endpoint": { status: "success" },
+    "v2/provider/duplicate-endpoint": { status: "success" },
+  });
+  try {
+    assert.equal((await jojapi(s, ["endpoints", "hide", "GET", "/Search"])).code, 0);
+    const hidden = s.posts("v2/provider/update-endpoint-details")[0].body;
+    assert.equal(hidden.url_path, "/Search");
+    assert.equal(hidden.name, "TEST /Search");
+    assert.equal((await jojapi(s, ["endpoints", "delete", "GET", "/search", "--yes"])).code, 0);
+    assert.equal(s.posts("v2/provider/delete-endpoint")[0].body.url_path, "/search");
+    assert.equal((await jojapi(s, ["endpoints", "duplicate", "GET", "/Search/", "GET", "/SEARCH"])).code, 0);
+    assert.deepEqual(s.posts("v2/provider/duplicate-endpoint")[0].body, { slug: "test-api", source_method: "GET", source_url_path: "/Search/", method: "GET", url_path: "/SEARCH" });
+    const missing = await jojapi(s, ["endpoints", "show", "GET", "/SEARCH"]);
+    assert.notEqual(missing.code, 0);
+    assert.match(missing.stderr, /Endpoint not found/);
+  } finally {
+    s.close();
+  }
+});
+
 test("moving an endpoint puts it last in its new group and resends the whole order", async () => {
   const s = await fakeStudio({
     "v2/move-endpoint-to-group": { status: "success" },
