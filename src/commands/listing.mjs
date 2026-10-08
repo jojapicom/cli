@@ -78,7 +78,7 @@ async function create(positional, flags) {
 
 // update-api-details replaces every field: what is not given is sent as it is
 async function update(positional, flags) {
-  const { slug } = slugAndArgs(positional, flags, 0, "update [slug] [--name] [--description] [--logo file.png] [--requests on|off] [--marketplace private|unlisted|public] [--about-file file.md]");
+  const { slug } = slugAndArgs(positional, flags, 0, "update [slug] [--name] [--description] [--logo file.png|jpg] [--requests on|off] [--marketplace private|unlisted|public] [--about-file file.md]");
   const platform = api();
   const a = await loadApi(platform, slug);
   const stored = a.marketplace_status;
@@ -105,7 +105,7 @@ async function update(positional, flags) {
       slug,
       name: text(flags, "name") ?? a.name,
       description: text(flags, "description") ?? a.description ?? "",
-      // "" keeps the stored logo; otherwise a PNG as base64
+      // "" keeps the stored logo; otherwise a PNG or JPEG as base64
       logo: logoFile ? readFileSync(logoFile).toString("base64") : "",
       blocked: requests === undefined ? a.blocked === true : requests === "off",
       marketplace_status: marketplace,
@@ -507,9 +507,9 @@ export default {
       run: create,
     },
     update: {
-      usage: ["update [slug] [--name text] [--description text] [--logo file.png] [--requests on|off] [--marketplace private|unlisted|public] [--about-file about.md]"],
+      usage: ["update [slug] [--name text] [--description text] [--logo file.png|jpg] [--requests on|off] [--marketplace private|unlisted|public] [--about-file about.md]"],
       summary: "change the API's details, visibility or about page",
-      help: "--marketplace public submits the API for review (the listing checks run first and name what is missing); leaving public delists it and asks first. --requests off makes the gateway reject every call (asks first). The logo is a PNG up to 2 MB.",
+      help: "--marketplace public submits the API for review (the listing checks run first and name what is missing); leaving public delists it and asks first. --requests off makes the gateway reject every call (asks first). The logo is a PNG or JPEG up to 4 MB.",
       run: update,
     },
     resubmit: {
