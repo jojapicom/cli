@@ -8,7 +8,7 @@ write that cannot be taken back shows what changes and asks first.
 
 ```bash
 npm install -g @jojapi/cli          # or: npx @jojapi/cli …
-jojapi login --token jm_…           # Studio → Management API
+jojapi login --token jm_…           # Settings › Tokens
 jojapi help                         # every command; jojapi <command> --help for its arguments
 ```
 
@@ -77,8 +77,8 @@ jojapi keys delete n1a2b3c4d        # by the id from jojapi keys (asks first)
 
 ## Token scopes
 
-Create the token under **Studio → Management API** with the scopes of the commands you use; the
-templates there cover the common jobs (CI preview or production deploys, a docs, analytics or
+Create the token in **Settings › Tokens** with the scopes of the commands you use; the templates
+there cover the common jobs (CI preview or production deploys, a docs, analytics or
 consumer agent). A command whose scope is missing stops with the scope it needs, and
 `jojapi whoami` shows what a token may do.
 

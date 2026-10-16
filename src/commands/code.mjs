@@ -16,7 +16,7 @@ import { matchEndpoint } from "../match.mjs";
 async function login(positional, flags) {
   const token = typeof flags.token === "string" ? flags.token.trim() : process.env.JOJAPI_TOKEN || "";
   if (!/^jm_[A-Za-z0-9_-]{20,}$/.test(token)) {
-    console.error("pass a management token: jojapi login --token jm_…  (Studio → Management API)");
+    console.error("pass a management token: jojapi login --token jm_…  (Settings › Tokens)");
     return 2;
   }
   const base = (typeof flags.base === "string" ? flags.base : readConfig().base).replace(/\/$/, "");
@@ -286,7 +286,7 @@ export default {
     login: {
       usage: ["login --token jm_… [--base URL]"],
       summary: "store a management token",
-      help: "Create the token in the Studio under Management API with the scopes of the commands you use (the README lists them; the CI templates cover deploys). It is stored in ~/.config/jojapi/config.json (mode 0600); JOJAPI_TOKEN and JOJAPI_BASE override it. jojapi whoami shows what the stored token may do.",
+      help: "Create the token in Settings › Tokens with the scopes of the commands you use (the README lists them; the CI templates cover deploys). It is stored in ~/.config/jojapi/config.json (mode 0600); JOJAPI_TOKEN and JOJAPI_BASE override it. jojapi whoami shows what the stored token may do.",
       run: login,
     },
     pull: {
