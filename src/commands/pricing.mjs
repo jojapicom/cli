@@ -517,7 +517,7 @@ export default {
     grant: {
       usage: ["grant [slug] <user nick> <object> <units> [--plan plan] [--note text] [--yes]"],
       summary: "add free quota to a subscriber's current period",
-      help: "Needs the plans:write and subscriptions:read scopes. Not a charge; it expires when the period renews and the subscriber gets an email. It is never retried: running it again adds again.",
+      help: "Needs the subscribers:read and subscribers:write scopes (a token from before them: plans:write and subscriptions:read). Not a charge; it expires when the period renews and the subscriber gets an email. It is never retried: running it again adds again.",
       run: grant,
     },
   },
