@@ -297,6 +297,8 @@ async function planAccess(positional, flags) {
   const res = await platform.post("v2/set-user-custom-api-plan", { user_nick: nick, plan_slug: planSlug, block: ACCESS[mode].block, delete: ACCESS[mode].delete });
   if (res.status !== "success") return refused(res, flags);
   console.log(`@${nick} ${ACCESS[mode].done}`);
+  // The platform emails the user what changed and says whether it could
+  if (res.notification?.message) console.log(res.notification.message);
   return 0;
 }
 
@@ -495,7 +497,7 @@ export default {
         "plans access [slug] <plan> <user nick> allow|block|remove",
       ],
       summary: "plans: what they cost, include and who can subscribe",
-      help: "New plans are private until --public or `plans public`. Price, currency, period and what a plan includes never change; a new price is a new plan, and subscribers move to it with a transfer in the Studio. add-object is permanent and emails every subscriber. access lets one user see a private plan (allow) or keeps them off a public one (block). Every change asks first; --yes answers for scripts.",
+      help: "New plans are private until --public or `plans public`. Price, currency, period and what a plan includes never change; a new price is a new plan, and subscribers move to it with a transfer in the Studio. add-object is permanent and emails every subscriber. access lets one user see a private plan (allow) or keeps them off a public one (block), and emails them what changed. Every change asks first; --yes answers for scripts.",
       run: plans,
     },
     features: {

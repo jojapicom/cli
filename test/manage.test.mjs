@@ -257,6 +257,30 @@ test("making a plan private resends its rate limit; add-object names the subscri
   }
 });
 
+test("plans access says whether the user was emailed", async () => {
+  const s = await fakeStudio({
+    "v2/studio/api-plans": plansAnswer(),
+    "v2/set-user-custom-api-plan": (body) => ({
+      status: "success",
+      message: "@test-alice can see and subscribe to this plan.",
+      notification: body.delete
+        ? { emailed: false, code: "no_change", message: "No email was sent: this does not change what @test-alice can do.", at: null }
+        : { emailed: true, code: "sent", message: "@test-alice was notified by email.", at: "2026-10-16T14:02:11+03:00" },
+    }),
+  });
+  try {
+    const allowed = await jojapi(s, ["plans", "access", "plantest000000000000basic", "test-alice", "allow"]);
+    assert.equal(allowed.code, 0, allowed.stderr);
+    assert.deepEqual(s.posts("v2/set-user-custom-api-plan")[0].body, { user_nick: "test-alice", plan_slug: "plantest000000000000basic", block: false, delete: false });
+    assert.match(allowed.stdout, /@test-alice can see and subscribe to it even while it is private\n@test-alice was notified by email\./);
+    const removed = await jojapi(s, ["plans", "access", "plantest000000000000basic", "test-alice", "remove"]);
+    assert.equal(removed.code, 0, removed.stderr);
+    assert.match(removed.stdout, /No email was sent: this does not change what @test-alice can do\./);
+  } finally {
+    s.close();
+  }
+});
+
 test("grant finds the subscription by its subscriber and never prints its id", async () => {
   const s = await fakeStudio({
     "v2/ProviderSubscriptions": { status: "success", subscriptions: [{ api: { slug: "test-api" }, user: { nick: "testuser" }, plan: { slug: "plantest000000000000basic", type: "periodic", name: "10,000 Requests" }, subscription: { id: 987654, status: "active", current_period: { objects: [{ id: "objTEST1", slug: "requests", name: "Requests", used: 9500, quota: 10000 }] } } }] },
