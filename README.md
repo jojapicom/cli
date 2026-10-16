@@ -2,8 +2,9 @@
 
 Your APIs on JoJ API from the command line or CI: the Worker code and its deployments, bindings
 and variables; the listing, its OpenAPI document and pricing; traffic, request logs and
-subscribers. Everything goes through the [Management API](https://docs.jojapi.com/studio/management-api)
-with a scoped token, and every write that cannot be taken back shows what changes and asks first.
+subscribers; and the API keys of your account. Everything goes through the
+[Management API](https://docs.jojapi.com/studio/management-api) with a scoped token, and every
+write that cannot be taken back shows what changes and asks first.
 
 ```bash
 npm install -g @jojapi/cli          # or: npx @jojapi/cli …
@@ -66,20 +67,38 @@ jojapi apis                         # your APIs with 7-day traffic
 jojapi traffic --period day         # requests, status classes, latency, billable units
 jojapi requests --status 502        # the request log (credentials and cookies redacted)
 jojapi subscribers
+
+# Account
+jojapi whoami                       # who the token acts for: scopes, API/project limits, spend, expiry
+jojapi keys                         # API keys, values masked (--reveal prints them)
+jojapi keys create --to-env-file .env   # a new key written to .env as JOJAPI_KEY, never printed
+jojapi keys delete n1a2b3c4d        # by the id from jojapi keys (asks first)
 ```
 
 ## Token scopes
 
-Create the token under **Studio → Management API** with the scopes of the commands you use. A
-command whose scope is missing stops with the scope it needs.
+Create the token under **Studio → Management API** with the scopes of the commands you use; the
+templates there cover the common jobs (CI preview or production deploys, a docs, analytics or
+consumer agent). A command whose scope is missing stops with the scope it needs, and
+`jojapi whoami` shows what a token may do.
 
 | Scope | Commands |
 | --- | --- |
-| `code:read`, `code:write` | code, deployments, changes, resources, vars, settings, usage, mode |
-| `listings:read`, `listings:write` | info, create, update, endpoints, groups, faqs, objects, features, page, export, import |
-| `plans:write` | plans, billing, agents, grant |
-| `analytics:read` | dashboard, traffic, requests, transactions, the traffic columns of apis |
-| `subscriptions:read` | subscribers, grant |
+| `code:read` | pull, dev, status, deployments, changes, the lists of resources and vars |
+| `code:write` | deploy (a preview), mode, changes discard |
+| `deployments:promote` | deploy --prod, promote, rollback, changes deploy, deployments keep/public/archive, any `--prod` save |
+| `variables:write`, `resources:write`, `resources:delete`, `shares:write`, `runtime:write` | vars set/delete, resources add, resources remove, resources share/accept/revoke, settings |
+| `apis:read` | info, endpoints, plans, objects, page, export, apis |
+| `apis:write`, `apis:publish` | create, update, faqs; visibility, requests on/off and resubmit |
+| `endpoints:write`, `imports:write` | endpoints changes, groups; import |
+| `plans:write`, `metering:write` | plans, features; objects, billing, agents |
+| `analytics:read`, `runtime-logs:read`, `request-logs:read` | traffic, usage, the traffic columns of apis; logs, errors; requests |
+| `earnings:read` | dashboard (with `analytics:read`), transactions |
+| `subscribers:read`, `subscribers:write` | subscribers; grant |
+| `keys:read`, `keys:write` | keys; keys create and delete |
+
+Tokens created before these scopes (with `listings:read`, `code:write` and the like) keep working
+exactly as before, including in `jojapicom/deploy-action`; the Studio offers to upgrade them.
 
 ## Every save is a preview first
 
@@ -193,6 +212,11 @@ the plans that would refuse an endpoint (402), and asks first.
   with the reason on stderr.
 - Request logs never show credentials or cookies (a `jk_` key is shortened to its last four
   characters), also in `--json`; subscriber listings never show internal ids.
+- API key values stay out of the output: `jojapi keys` shows them masked, and
+  `jojapi keys create --to-env-file .env` writes a new key to a dotenv file (a new file gets mode
+  600) without printing it. Only `--reveal` prints a value. An agent that needs a key should use
+  `--to-env-file` and read the file from its code, so the key never enters its transcript. (The
+  flag is not `--env-file` because Node.js takes that one for itself.)
 
 `deploy --json`, for example:
 

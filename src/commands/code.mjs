@@ -20,13 +20,16 @@ async function login(positional, flags) {
     return 2;
   }
   const base = (typeof flags.base === "string" ? flags.base : readConfig().base).replace(/\/$/, "");
-  const me = await client({ token, base }).get("v2/ProviderApis");
+  const platform = client({ token, base });
+  // The token describes itself; a platform from before introspection is asked for the API list
+  let me = await platform.get("v2/management-token");
+  if (me.status === "method_not_allowed") me = await platform.get("v2/ProviderApis");
   if (me.status !== "success") {
     console.error(`the token was refused: ${me.message || me.status}`);
     return 1;
   }
   const path = writeConfig({ token, base });
-  console.log(`token stored in ${path} for ${base}`);
+  console.log(`token stored in ${path} for ${base}${me.account ? ` — @${me.account.username}, ${me.token.scopes.length} scope(s)` : ""}`);
   return 0;
 }
 
@@ -283,7 +286,7 @@ export default {
     login: {
       usage: ["login --token jm_… [--base URL]"],
       summary: "store a management token",
-      help: "Create the token in the Studio under Management API with the scopes of the commands you use: code:read and code:write for the Worker, listings:*, plans:write, analytics:read and subscriptions:read for the rest. It is stored in ~/.config/jojapi/config.json (mode 0600); JOJAPI_TOKEN and JOJAPI_BASE override it.",
+      help: "Create the token in the Studio under Management API with the scopes of the commands you use (the README lists them; the CI templates cover deploys). It is stored in ~/.config/jojapi/config.json (mode 0600); JOJAPI_TOKEN and JOJAPI_BASE override it. jojapi whoami shows what the stored token may do.",
       run: login,
     },
     pull: {

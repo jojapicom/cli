@@ -11,8 +11,9 @@ import analytics from "./commands/analytics.mjs";
 import listing from "./commands/listing.mjs";
 import pricing from "./commands/pricing.mjs";
 import openapi from "./commands/openapi.mjs";
+import account from "./commands/account.mjs";
 
-const GROUPS = [code, deployments, worker, listing, openapi, pricing, analytics];
+const GROUPS = [code, deployments, worker, listing, openapi, pricing, analytics, account];
 const COMMANDS = new Map(GROUPS.flatMap((group) => Object.entries(group.commands)));
 
 export async function run(argv) {

@@ -29,7 +29,9 @@ export function client(config) {
     } catch {
       throw new ApiError(`${method} ${path}: HTTP ${res.status} ${text.slice(0, 200)}`, null);
     }
-    if (json.status === "unauthorized" || json.status === "insufficient_scope") {
+    // Refusals of the token itself: bad or revoked, a scope it lacks, or an API
+    // or project outside its restrictions
+    if (json.status === "unauthorized" || json.status === "insufficient_scope" || json.status === "resource_not_allowed") {
       throw new ApiError(`${method} ${path}: ${json.message || json.status}${json.required_scopes ? ` (needs ${json.required_scopes.join(", ")})` : ""}`, json);
     }
     return json;

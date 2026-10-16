@@ -2,7 +2,7 @@
 // `--name=value`).
 
 // Switches never take a value: `deploy --prod ./dir` keeps ./dir positional
-const BOOLEAN_FLAGS = new Set(["prod", "take-over", "dry-run", "follow", "json", "yes", "help", "secret", "details", "ungrouped", "overwrite", "all", "public", "payg", "keep-changed", "hide-missing", "new-hidden", "apply", "yaml"]);
+const BOOLEAN_FLAGS = new Set(["prod", "take-over", "dry-run", "follow", "json", "yes", "help", "secret", "details", "ungrouped", "overwrite", "all", "public", "payg", "keep-changed", "hide-missing", "new-hidden", "apply", "yaml", "reveal"]);
 
 export function parseArgs(args) {
   const positional = [];
