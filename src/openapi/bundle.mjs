@@ -86,5 +86,7 @@ function bundleEndpoint(e) {
         ? { content_type: "application/json", json_body: JSON.stringify(e.requestBody.body), json_schema: e.requestBody.schema ? JSON.stringify(e.requestBody.schema) : null }
         : { content_type: "application/x-www-form-urlencoded", parameters: bundleParams(e.requestBody.parameters) },
     responses: (e.responses || []).map((r) => ({ status: r.status, description: r.description || "", schema: r.schema || null, examples: r.examples || [] })),
+    // Only from a source that has the notion (OpenAPI): without the key the stored deprecation stays
+    ...(e.deprecation !== undefined ? { deprecation: e.deprecation } : {}),
   };
 }

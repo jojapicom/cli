@@ -54,6 +54,16 @@ function buildImportedParameter(key, rawName, description, example, valueTypeInf
   };
 }
 
+// OpenAPI's `deprecated: true` with our extension's fields (date, removal date,
+// successor "METHOD /path"), as the platform reads them; strings only, the
+// platform checks and drops the rest with a warning
+function deprecationOf(extension) {
+  const ext = extension && typeof extension === "object" && !Array.isArray(extension) ? extension : {};
+  const out = {};
+  for (const field of ["date", "sunset", "successor"]) if (typeof ext[field] === "string" && ext[field].trim() !== "") out[field] = ext[field].trim();
+  return out;
+}
+
 // Auth-ish headers the gateway injects or strips — never imported as docs
 export const IMPORT_SKIPPED_HEADERS = [
   "authorization",
@@ -126,6 +136,8 @@ export function parseOpenApiDocument(openApiSpec) {
           pathParameters: [],
           headerParameters: [],
           responses: [],
+          // Without `deprecated: true` it is not deprecated (OpenAPI's default)
+          deprecation: operation.deprecated === true ? deprecationOf(operation["x-jojapi-deprecation"]) : null,
         };
 
         // Merge path-level and operation-level parameters (operation wins)

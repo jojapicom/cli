@@ -46,6 +46,8 @@ jojapi info                         # details, marketplace status, endpoint coun
 jojapi endpoints                    # by group, with visibility, billing and agent price
 jojapi endpoints show GET /users/{id}
 jojapi endpoints hide GET /users/{id}
+jojapi endpoints deprecate GET /v1/users --successor "GET /v2/users" --sunset 2027-02-01
+jojapi endpoints callers GET /v1/users  # who still calls it, before you delete it
 jojapi update --marketplace public  # submit for review; the checks name what is missing
 jojapi faqs add --question "…" --answer "…"
 jojapi objects add requests --name Requests --formula 1
@@ -92,7 +94,7 @@ consumer agent). A command whose scope is missing stops with the scope it needs,
 | `apis:write`, `apis:publish` | create, update, faqs; visibility, requests on/off and resubmit |
 | `endpoints:write`, `imports:write` | endpoints changes, groups; import |
 | `plans:write`, `metering:write` | plans, features; objects, billing, agents |
-| `analytics:read`, `runtime-logs:read`, `request-logs:read` | traffic, usage, the traffic columns of apis; logs, errors; requests |
+| `analytics:read`, `runtime-logs:read`, `request-logs:read` | traffic, usage, the traffic columns of apis, endpoints callers; logs, errors; requests |
 | `earnings:read` | dashboard (with `analytics:read`), transactions |
 | `subscribers:read`, `subscribers:write` | subscribers; grant |
 | `keys:read`, `keys:write` | keys; keys create and delete |
@@ -188,8 +190,10 @@ document, the options or the API. Without a terminal (CI, agents) `--apply` need
 terminal it shows the preview and asks. Changed endpoints are overwritten unless `--keep-changed`;
 endpoints missing from the document are kept unless `--hide-missing` (hidden from the docs, never
 deleted); the API's name, description and about text change only with `--metadata
-name,description,about`. Billing, requests on/off and the groups and order of existing endpoints
-never change. OpenAPI (JSON or YAML) and Postman Collections are read from a file or a URL;
+name,description,about`. An operation's `deprecated: true` deprecates the endpoint and its absence
+undeprecates it; `jojapi export` writes the date, removal date and successor in
+`x-jojapi-deprecation`, so they travel with the document. Billing, requests on/off and the groups
+and order of existing endpoints never change. OpenAPI (JSON or YAML) and Postman Collections are read from a file or a URL;
 `jojapi import` without a source re-imports from the URL the last import came from. RapidAPI and
 Apify imports run in the Studio.
 

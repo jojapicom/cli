@@ -103,6 +103,55 @@ test("hiding an endpoint sends its billing back unchanged", async () => {
   }
 });
 
+test("deprecate keeps what a flag leaves out, undeprecate clears it, callers lists the subscribers", async () => {
+  const stored = { date: "2026-11-01T00:00:00Z", sunset: "2027-02-01T00:00:00Z", successor: { method: "GET", url_path: "/users", name: "List users" } };
+  const s = await fakeStudio({
+    "v2/provider/api-endpoint": { status: "success", endpoint: { ...ENDPOINT, deprecation: stored } },
+    "v2/provider/update-endpoint-deprecation": (body) => ({
+      status: "success",
+      deprecation: body.deprecated ? { date: body.deprecated_at ?? stored.date, sunset: body.sunset_at, successor: body.successor ? { ...body.successor, name: "TEST" } : null } : null,
+    }),
+    "v2/provider/endpoint-callers": (_, query) => ({
+      status: "success",
+      days: Number(query.days ?? 30),
+      subscribers: 2,
+      requests: 45,
+      callers: [{ username: "test-heavy", subscription_id: "subTEST1", plan: "TEST Basic", requests: 42, last_called_at: "2026-10-31T20:00:00Z" }],
+    }),
+  });
+  try {
+    const sunsetOnly = await jojapi(s, ["endpoints", "deprecate", "GET", "/users/{id}", "--sunset", "2027-03-01"]);
+    assert.equal(sunsetOnly.code, 0, sunsetOnly.stderr);
+    assert.deepEqual(s.posts("v2/provider/update-endpoint-deprecation")[0].body, {
+      slug: "test-api", method: "GET", url_path: "/users/{id}", deprecated: true, sunset_at: "2027-03-01", successor: { method: "GET", url_path: "/users" },
+    });
+    assert.match(sunsetOnly.stdout, /deprecated since 2026-11-01 · removal planned 2027-03-01 · replaced by GET \/users/);
+
+    await jojapi(s, ["endpoints", "deprecate", "GET", "/users/{id}", "--date", "2026-12-01", "--successor", "none", "--sunset", "none"]);
+    assert.deepEqual(s.posts("v2/provider/update-endpoint-deprecation")[1].body, {
+      slug: "test-api", method: "GET", url_path: "/users/{id}", deprecated: true, deprecated_at: "2026-12-01", sunset_at: null, successor: null,
+    });
+    const bad = await jojapi(s, ["endpoints", "deprecate", "GET", "/users/{id}", "--successor", "users"]);
+    assert.equal(bad.code, 1);
+    assert.match(bad.stderr, /METHOD \/path/);
+
+    assert.equal((await jojapi(s, ["endpoints", "undeprecate", "GET", "/users/{id}"])).code, 0);
+    assert.deepEqual(s.posts("v2/provider/update-endpoint-deprecation").at(-1).body, { slug: "test-api", method: "GET", url_path: "/users/{id}", deprecated: false });
+
+    const callers = await jojapi(s, ["endpoints", "callers", "GET", "/users/{id}", "--days", "7"]);
+    assert.equal(callers.code, 0, callers.stderr);
+    assert.match(callers.stdout, /2 subscriber\(s\), 45 request\(s\) to GET \/users\/\{id\} in the last 7 day\(s\)/);
+    assert.match(callers.stdout, /test-heavy\s+TEST Basic\s+42\s+2026-10-31 20:00/);
+    assert.match(callers.stdout, /… and 1 more/);
+    assert.deepEqual(s.calls.find((c) => c.route === "v2/provider/endpoint-callers").query, { slug: "test-api", method: "GET", url_path: "/users/{id}", days: "7" });
+
+    const shown = await jojapi(s, ["endpoints", "show", "GET", "/users/{id}"]);
+    assert.match(shown.stdout, /deprecated since 2026-11-01 · removal planned 2027-02-01 · replaced by GET \/users/);
+  } finally {
+    s.close();
+  }
+});
+
 test("paths that differ only in case or a trailing slash address different endpoints", async () => {
   // The gateway matches paths byte for byte, so the platform does too
   const endpoints = ["/Search/", "/search", "/Search"].map((url_path) => ({ ...ENDPOINT, url_path, name: `TEST ${url_path}`, consumptions: [] }));

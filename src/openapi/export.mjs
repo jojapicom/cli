@@ -145,6 +145,17 @@ export function buildSpec(details, page) {
       operationId: operationId(e.method, e.url_path, used),
       ...(e.name ? { summary: e.name } : {}),
       ...(e.description ? { description: e.description } : {}),
+      // OpenAPI has the flag only; the dates and the successor ride in our extension so the document imports back equal
+      ...(e.deprecation
+        ? {
+            deprecated: true,
+            "x-jojapi-deprecation": {
+              date: e.deprecation.date,
+              ...(e.deprecation.sunset ? { sunset: e.deprecation.sunset } : {}),
+              ...(e.deprecation.successor ? { successor: `${e.deprecation.successor.method} ${e.deprecation.successor.url_path}` } : {}),
+            },
+          }
+        : {}),
       ...(group.ungrouped ? {} : { tags: [group.name] }),
       ...(params.length ? { parameters: params } : {}),
       ...(body ? { requestBody: body } : {}),

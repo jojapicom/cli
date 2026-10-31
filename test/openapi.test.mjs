@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dump } from "js-yaml";
 import { buildBundle } from "../src/openapi/bundle.mjs";
-import { currentRecord, endpointDiff, incomingRecord } from "../src/openapi/diff.mjs";
+import { currentRecord, endpointDiff, incomingRecord, renderEndpointDiff } from "../src/openapi/diff.mjs";
 import { buildSpec } from "../src/openapi/export.mjs";
 import { fakeStudio, jojapi, project } from "./helpers.mjs";
 
@@ -18,6 +18,7 @@ function testPage() {
   const current = {
     method: "GET", url_path: "/current", name: "Current weather", description: "Weather now", hidden: false, blocked: false, agent_price: 0.05, order: 0,
     root_url: "https://test-weather.example.test",
+    deprecation: { date: "2026-11-01T00:00:00Z", sunset: "2027-02-01T00:00:00Z", successor: { method: "POST", url_path: "/forecast/{city}/{day}", name: "Forecast" } },
     parameters: {
       url: [
         param("city", { name: "City", description: "City name", example: "Istanbul", required: true }),
@@ -106,6 +107,35 @@ test("an export never carries the viewer's API keys and documents the gateway an
   assert.equal(spec.paths["/current"].get["x-payment-info"].price.amount, "0.05");
   assert.equal(spec.paths["/current"].get.responses["402"], undefined);
   assert.equal(spec.paths["/current"].get.responses["200"].description, "");
+});
+
+test("a deprecation exports as deprecated: true with x-jojapi-deprecation and imports back as the same values", async () => {
+  const page = testPage();
+  const spec = buildSpec(DETAILS, page);
+  const op = spec.paths["/current"].get;
+  assert.equal(op.deprecated, true);
+  assert.deepEqual(op["x-jojapi-deprecation"], { date: "2026-11-01T00:00:00Z", sunset: "2027-02-01T00:00:00Z", successor: "POST /forecast/{city}/{day}" });
+  assert.equal(spec.paths["/raw"].post.deprecated, undefined);
+
+  const { bundle } = await buildBundle({ content: JSON.stringify(spec), url: null });
+  const incoming = (path) => bundle.endpoints.find((b) => b.url_path === path);
+  assert.deepEqual(incoming("/current").deprecation, { date: "2026-11-01T00:00:00Z", sunset: "2027-02-01T00:00:00Z", successor: "POST /forecast/{city}/{day}" });
+  // Not deprecated in OpenAPI's terms: null, so a document without the flag undeprecates
+  assert.equal(incoming("/raw").deprecation, null);
+
+  // The diff says from what to what (the platform decides whether it changed)
+  const raw = page.endpoint_groups[1].endpoints[2];
+  const on = endpointDiff(currentRecord(raw), incomingRecord({ ...incoming("/raw"), deprecation: { date: "2026-12-01T00:00:00Z", successor: "POST /forecast/{city}/{day}" } }), ["deprecation"]);
+  assert.deepEqual(on.deprecation, [{ field: "deprecation", before: "off", after: "since 2026-12-01, successor POST /forecast/{city}/{day}" }]);
+  assert.deepEqual(renderEndpointDiff(on, ""), ["deprecation: off → since 2026-12-01, successor POST /forecast/{city}/{day}"]);
+  const off = endpointDiff(currentRecord(page.endpoint_groups[0].endpoints[0]), incomingRecord({ ...incoming("/current"), deprecation: null }), ["deprecation"]);
+  assert.deepEqual(off.deprecation, [{ field: "deprecation", before: "since 2026-11-01, removal 2027-02-01, successor POST /forecast/{city}/{day}", after: "off" }]);
+});
+
+test("a Postman collection says nothing about deprecation: the bundle carries no key", async () => {
+  const collection = { info: { name: "TEST", schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json" }, item: [{ name: "Get", request: { method: "GET", url: { raw: "https://example.test/x", path: ["x"] } } }] };
+  const { bundle } = await buildBundle({ content: JSON.stringify(collection), url: null });
+  assert.equal("deprecation" in bundle.endpoints[0], false);
 });
 
 test("the diff names every value that changes", async () => {

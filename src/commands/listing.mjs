@@ -56,7 +56,7 @@ async function info(positional, flags) {
     ...(a.warned_at ? [["warning", `${a.warning_reason ?? ""} — fix before ${when(a.warning_deadline_at)}${a.warning_resubmitted_at ? ", resubmitted" : ", then jojapi resubmit"}`]] : []),
     ["requests", a.blocked ? "off — the gateway rejects every call" : "on"],
     ["gateway", `${a.edge ? "edge" : "classic"}${(a.gateways ?? []).length ? ` · ${a.gateways.map((g) => g.sub).join(", ")}` : ""}`],
-    ["endpoints", `${endpoints.length} (${endpoints.filter((e) => e.hidden).length} hidden from docs, ${endpoints.filter((e) => e.blocked).length} with requests off) in ${(a.endpoint_groups ?? []).filter((g) => !g.ungrouped).length} group(s)`],
+    ["endpoints", `${endpoints.length} (${endpoints.filter((e) => e.hidden).length} hidden from docs, ${endpoints.filter((e) => e.blocked).length} with requests off${endpoints.some((e) => e.deprecation) ? `, ${endpoints.filter((e) => e.deprecation).length} deprecated` : ""}) in ${(a.endpoint_groups ?? []).filter((g) => !g.ungrouped).length} group(s)`],
     ["agent payments", a.agent_request_enabled ? "on" : "off"],
     ...(a.import_source ? [["imported from", `${a.import_source.url ?? a.import_source.type} (${when(a.import_source.last_imported_at)})`]] : []),
     ["about", a.about ? `${a.about.length} characters` : "—"],
@@ -151,7 +151,7 @@ async function endpoints(positional, flags) {
     return 0;
   }
   // One table across groups (aligned), with each group's heading above its rows
-  const lines = columns(list.map((e) => [`  ${e.method}`, e.url_path, e.name, [e.blocked && "requests off", e.hidden && "hidden"].filter(Boolean).join(", "), billingText(e), e.agent_price ? `agent $${e.agent_price}` : ""])).split("\n");
+  const lines = columns(list.map((e) => [`  ${e.method}`, e.url_path, e.name, [e.blocked && "requests off", e.hidden && "hidden", e.deprecation && "deprecated"].filter(Boolean).join(", "), billingText(e), e.agent_price ? `agent $${e.agent_price}` : ""])).split("\n");
   const out = [];
   list.forEach((e, i) => {
     if (i === 0 || e.group !== list[i - 1].group) out.push(`${i === 0 ? "" : "\n"}${e.group ?? "Ungrouped"}`);
@@ -168,6 +168,7 @@ async function endpointShow(positional, flags) {
   console.log(`${e.method} ${e.url_path} — ${e.name}`);
   if (e.description) console.log(e.description);
   console.log(`\nrequests ${e.blocked ? "off" : "on"} · ${e.hidden ? "hidden from docs" : "in docs"}`);
+  if (e.deprecation) console.log(deprecationText(e.deprecation));
   console.log(`billing: ${e.consumptions?.length ? e.consumptions.map((c) => `${c.slug} ${c.cost === "" ? `(object default: ${c.object_default_used_logic || "nothing"})` : c.cost}${c.label ? ` "${c.label}"` : ""}`).join("; ") : "free (no billable object)"}`);
   const param = (p) => [`  ${p.key}`, p.value_type ?? "string", p.required ? "required" : "", p.example ? `e.g. ${p.example}` : "", p.description ?? ""];
   const path = e.path_parameters ?? [];
@@ -320,6 +321,86 @@ async function endpointExample(positional, flags) {
   return 0;
 }
 
+// ---------------------------------------------------------------------------
+// Deprecation: the endpoint keeps working; the gateway adds Deprecation,
+// Sunset and Link headers, the docs show the successor. Removing it is
+// deleting it.
+
+const day = (iso) => String(iso).slice(0, 10);
+
+export function deprecationText(d) {
+  return [
+    `deprecated since ${day(d.date)}`,
+    d.sunset ? `removal planned ${day(d.sunset)}` : null,
+    d.successor ? `replaced by ${d.successor.method} ${d.successor.url_path}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+// "GET /v2/users/{id}" (or the two words as separate arguments)
+function successorRef(value) {
+  const [method, path, ...rest] = String(value).trim().split(/\s+/);
+  if (rest.length || !path) throw new Error('--successor is "METHOD /path", e.g. --successor "GET /v2/users/{id}"');
+  return endpointRef(method, path);
+}
+
+async function endpointDeprecate(positional, flags) {
+  const usage = 'endpoints deprecate [slug] <METHOD> <path> [--successor "METHOD /path" | none] [--sunset YYYY-MM-DD | none] [--date YYYY-MM-DD]';
+  const { slug, args } = slugAndArgs(positional, flags, 2, usage);
+  const ref = endpointRef(...args);
+  const platform = api();
+  // The route sets the whole deprecation: what a flag leaves out stays as it is stored
+  const stored = (await loadEndpoint(platform, slug, ref)).deprecation ?? null;
+  const successor = text(flags, "successor");
+  const sunset = text(flags, "sunset");
+  const payload = {
+    slug,
+    ...ref,
+    deprecated: true,
+    ...(text(flags, "date") ? { deprecated_at: text(flags, "date") } : {}),
+    sunset_at: sunset === undefined ? (stored?.sunset ?? null) : sunset === "none" ? null : sunset,
+    successor:
+      successor === undefined
+        ? stored?.successor
+          ? { method: stored.successor.method, url_path: stored.successor.url_path }
+          : null
+        : successor === "none"
+          ? null
+          : successorRef(successor),
+  };
+  const res = await platform.post("v2/provider/update-endpoint-deprecation", payload);
+  if (res.status !== "success") return refused(res, flags);
+  if (flags.json) return printJson({ status: "success", deprecation: res.deprecation });
+  console.log(`${ref.method} ${ref.url_path} ${deprecationText(res.deprecation)}`);
+  console.log("it keeps working unchanged; its responses carry Deprecation headers and the docs show it as deprecated");
+  return 0;
+}
+
+async function endpointUndeprecate(positional, flags) {
+  const { slug, args } = slugAndArgs(positional, flags, 2, "endpoints undeprecate [slug] <METHOD> <path>");
+  const ref = endpointRef(...args);
+  const res = await api().post("v2/provider/update-endpoint-deprecation", { slug, ...ref, deprecated: false });
+  if (res.status !== "success") return refused(res, flags);
+  if (flags.json) return printJson({ status: "success", deprecation: null });
+  console.log(`${ref.method} ${ref.url_path} is no longer deprecated`);
+  return 0;
+}
+
+async function endpointCallers(positional, flags) {
+  const { slug, args } = slugAndArgs(positional, flags, 2, "endpoints callers [slug] <METHOD> <path> [--days 30]");
+  const ref = endpointRef(...args);
+  const res = ok(await api().get("v2/provider/endpoint-callers", { slug, ...ref, ...(text(flags, "days") ? { days: text(flags, "days") } : {}) }));
+  if (flags.json) return printJson({ days: res.days, subscribers: res.subscribers, requests: res.requests, callers: res.callers });
+  console.log(`${res.subscribers} subscriber(s), ${res.requests} request(s) to ${ref.method} ${ref.url_path} in the last ${res.days} day(s)`);
+  if (res.callers.length) {
+    console.log("");
+    console.log(columns([["  user", "plan", "requests", "last call (UTC)"], ...res.callers.map((c) => [`  ${c.username ?? "(deleted)"}`, c.plan ?? "", c.requests, when(c.last_called_at)])]));
+  }
+  if (res.subscribers > res.callers.length) console.log(`  … and ${res.subscribers - res.callers.length} more`);
+  return 0;
+}
+
 const ENDPOINT_ACTIONS = {
   show: endpointShow,
   add: endpointAdd,
@@ -328,6 +409,9 @@ const ENDPOINT_ACTIONS = {
   unhide: endpointToggle("unhide"),
   disable: endpointToggle("disable"),
   enable: endpointToggle("enable"),
+  deprecate: endpointDeprecate,
+  undeprecate: endpointUndeprecate,
+  callers: endpointCallers,
   delete: endpointDelete,
   duplicate: endpointDuplicate,
   move: endpointMove,
@@ -525,13 +609,16 @@ export default {
         'endpoints update [slug] <METHOD> <path> [--name "Name"] [--description text]',
         "endpoints hide|unhide [slug] <METHOD> <path>",
         "endpoints disable|enable [slug] <METHOD> <path>",
+        'endpoints deprecate [slug] <METHOD> <path> [--successor "METHOD /path" | none] [--sunset YYYY-MM-DD | none] [--date YYYY-MM-DD]',
+        "endpoints undeprecate [slug] <METHOD> <path>",
+        "endpoints callers [slug] <METHOD> <path> [--days 30] [--json]",
         "endpoints delete [slug] <METHOD> <path> [--yes]",
         "endpoints duplicate [slug] <METHOD> <path> <new METHOD> <new path>",
         "endpoints move [slug] <METHOD> <path> <group | --ungrouped>",
         "endpoints example [slug] <METHOD> <path> <status> <name> --file example.json [--summary text] [--overwrite]",
       ],
       summary: "list, inspect and change the API's endpoints",
-      help: "hide takes an endpoint out of the API page, the OpenAPI document and MCP tools; the gateway still serves it. disable makes the gateway reject calls to it; it stays documented. Parameters, bodies and responses are edited in bulk from an OpenAPI document: jojapi export, edit, jojapi import.",
+      help: "hide takes an endpoint out of the API page, the OpenAPI document and MCP tools; the gateway still serves it. disable makes the gateway reject calls to it; it stays documented. deprecate marks it deprecated (today unless --date, up to a year ahead) with an optional successor and removal date: it keeps working unchanged, its responses carry Deprecation, Sunset and Link headers, and the docs show the successor; flags left out keep their stored values. callers lists the subscribers who called an endpoint lately, before you delete it. Parameters, bodies and responses are edited in bulk from an OpenAPI document: jojapi export, edit, jojapi import.",
       run: endpoints,
     },
     groups: {

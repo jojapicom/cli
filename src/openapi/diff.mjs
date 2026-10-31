@@ -58,6 +58,9 @@ export function currentRecord(e) {
       schema: r.schema ?? null,
       examples: r.examples ?? [],
     })),
+    deprecation: e.deprecation
+      ? { date: e.deprecation.date, sunset: e.deprecation.sunset ?? null, successor: e.deprecation.successor ? `${e.deprecation.successor.method} ${e.deprecation.successor.url_path}` : null }
+      : null,
   };
 }
 
@@ -74,7 +77,21 @@ export function incomingRecord(b) {
         : { content_type: b.body.content_type, parameters: (b.body.parameters ?? []).map(canonicalParameter) }
       : null,
     responses: (b.responses ?? []).map((r) => ({ status: String(r.status), description: r.description ?? "", schema: r.schema ?? null, examples: r.examples ?? [] })),
+    // undefined: the source says nothing; null: not deprecated
+    deprecation: b.deprecation,
   };
+}
+
+const day = (iso) => String(iso).slice(0, 10);
+
+// A deprecation in words; an incoming one without a date keeps the stored date (or starts today)
+function deprecationWords(d, stored = null) {
+  if (!d) return "off";
+  const date = d.date ?? stored?.date ?? null;
+  const parts = [date ? `since ${day(date)}` : "since today"];
+  if (d.sunset) parts.push(`removal ${day(d.sunset)}`);
+  if (d.successor) parts.push(`successor ${d.successor}`);
+  return parts.join(", ");
 }
 
 // Value-level differences between two JSON values, with their JSON paths
@@ -191,6 +208,10 @@ export function endpointDiff(current, incoming, aspects) {
       }
       for (const [status, r] of was) if (!now.has(status)) out.push({ op: "remove", status, before: { description: r.description, examples: r.examples.map((x) => x.name) } });
       diff.responses = out;
+    } else if (aspect === "deprecation") {
+      // The platform decided it changes (dates are clamped there); this says from what to what
+      const plain = incoming.deprecation && !incoming.deprecation.date && !incoming.deprecation.sunset && !incoming.deprecation.successor;
+      diff.deprecation = [{ field: "deprecation", before: deprecationWords(current.deprecation), after: plain && current.deprecation ? deprecationWords(current.deprecation) : deprecationWords(incoming.deprecation, current.deprecation) }];
     }
   }
   return diff;
@@ -224,6 +245,7 @@ function parameterLines(changes, indent) {
 export function renderEndpointDiff(diff, indent = "      ") {
   const lines = [];
   if (diff.info?.length) lines.push(`${indent}info`, ...diff.info.map((f) => `${indent}  ${f.field}: ${show(f.before)} → ${show(f.after)}`));
+  for (const f of diff.deprecation ?? []) lines.push(`${indent}deprecation: ${f.before} → ${f.after}`);
   if (diff.parameters?.length) lines.push(`${indent}parameters`, ...parameterLines(diff.parameters, `${indent}  `));
   if (diff.path_parameters?.length) lines.push(`${indent}path parameter docs`, ...parameterLines(diff.path_parameters, `${indent}  `));
   if (diff.body?.length) {
@@ -269,5 +291,6 @@ export function renderNewEndpoint(b, indent = "      ") {
   if (b.body?.content_type === "application/json") lines.push(`${indent}body JSON${b.body.json_schema ? " with schema" : ""}: ${show(parseJson(b.body.json_body), 100)}`);
   if (b.body?.content_type === "application/x-www-form-urlencoded") for (const p of b.body.parameters ?? []) lines.push(`${indent}form ${p.key} (${parameterLine(canonicalParameter(p))})`);
   for (const r of b.responses ?? []) lines.push(`${indent}response ${r.status}${r.description ? ` ${show(r.description, 60)}` : ""}${r.schema ? " · schema" : ""}${r.examples?.length ? ` · examples ${r.examples.map((x) => x.name).join(", ")}` : ""}`);
+  if (b.deprecation) lines.push(`${indent}deprecated ${deprecationWords(b.deprecation)}`);
   return lines;
 }
