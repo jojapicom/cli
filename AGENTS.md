@@ -38,7 +38,19 @@ deploy-action release that pins a CLI version is made only after that version is
 - **Never print the token.** It lives in `~/.config/jojapi/config.json` (mode 0600) or `JOJAPI_TOKEN`.
 - Example-vs-type validation of parameters (`src/openapi/parse-openapi.mjs`) has twins in the platform and the web
   frontend; a change to the rule changes all three.
-- Commit messages in English; work on a branch; nothing about customers, prices or people in code, docs or commits.
+- Commit messages in English; work on a branch.
+- **What lands here is shared.** Teammates and other agents read this repo, so code, docs, commits and PRs hold
+  engineering facts only:
+  - No customer or person names and no consumer ids: describe the traffic ("a bulk customer", "`gl=pl` traffic") and
+    say "the owner" or "a collaborator". Customer, subscriber and payer counts stay out; the request rates and volumes
+    the system must carry stay in.
+  - No amounts in docs (prices, costs, revenue, margins); relative statements are fine. Price constants and budgets
+    that drive behaviour stay in code, and our own public plan prices are part of the contract.
+  - No legal risk assessments, terms-of-service analysis or business-model reasoning. An engineering constraint that
+    follows from them stays (a non-commercial model licence, "paid calls must leave from a Turkish address").
+  - Infrastructure identifiers (hosts, IPs, bucket and secret names), our own brands and third-party provider names
+    are fine. Secret values and provider prices never are.
+  - This repository is public: our infrastructure identifiers and secret names stay out of it as well.
 
 ## Behaviour that is easy to get wrong
 
